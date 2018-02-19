@@ -1,0 +1,106 @@
+---
+title: "Course Project"
+author: "Yue Wu"
+date: "2/19/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+The goal of this project is to predict the manner in which they did the exercise. I use some machine learning algorithms to make predictions, which includes KNN, classification tree and random forests. To do the cross calidation, training data is splited into training part and validation part, using 5-folds cross validation. Then obtain out of sample error rate. Finally, using method given lowest out of sample error rate to do the predictions on testing data.
+
+
+## Load Data and Prepare
+```{r}
+train<-read.csv("/Users/apple/Desktop/project/pml-training.csv",na.strings = c("NA",""))
+test<-read.csv("/Users/apple/Desktop/project/pml-testing.csv",na.strings = c("NA",""))
+library(e1071)
+library(randomForest)
+library(class)
+
+```
+
+Drop columns that have more than 30% NAs, and drop NAs. Do the same for both training set and testing set.
+```{r}
+colSums(is.na(train))/nrow(train)
+train<-train[colSums(is.na(train))/nrow(train) < .3]
+train<-na.omit(train)
+test<-test[colSums(is.na(test))/nrow(test) < .3]
+test<-na.omit(test)
+```
+
+Drop variables that obviously not useful for building prediction model, such as 'user_name' and date...
+```{r}
+train<-train[,-c(1:6)]
+test<-test[,-c(1:6)]
+```
+
+For now, only 54 variables left. By ploting "classe", we could observe type A has the largest amount, and others are relatively even divided.  
+```{r}
+summary(train$classe)
+barplot(table(train$classe))
+dim(train)
+```
+
+## Some Algorithms
+
+Firstly, we split training set into training and validation part.(80/20)
+```{r}
+set.seed(5555)
+index<-sample(1:nrow(train),0.8*nrow(train),replace = FALSE)
+train_t<-train[index, ]
+train_cv<-train[-index, ]
+```
+
+## KNN
+```{r}
+knn<-tune.knn(train_t[,-54], train_t[,54], k=1:5, data=train_t, tunecontrol=tune.control(cross = 5))
+knn
+```
+From the result above, we can observe that using 5-fold cross validation, the best parameter is k = 1 , the best performance is 0.03.
+
+## Classification Tree
+```{r}
+tree<-tune.rpart(classe~., minsplit=c(5,10,15), data=train_t, tunecontrol=tune.control(cross = 5))
+tree
+```
+From the result above, we can observe that using 5-fold cross validation, the best parameter is minsplit = 5 , the best performance is 0.25.
+
+## Random Forest
+```{r}
+forest<-tune.randomForest(train_t[,-54], train_t[,54] , mtry = c(5,10,20,30,40,50), data=train_t, tunecontrol = tune.control(cross = 5))
+forest
+```
+From the result above, we can observe that using 5-fold cross validation, the best parameter is mtry = 20 , the best performance is 0.002. Thus the lowest error rate of cross validation is random forest.
+
+## Out of Sample Error
+
+knn
+```{r}
+knn_error<-knn(train_t[,-54], train_cv[,-54], train_t[,54], k = 1 )
+mean(knn_error != train_cv$classe)
+```
+
+Classification Tree 
+```{r}
+mean(predict(tree$best.model, train_cv, type = "class") != train_cv$classe)
+```
+
+Random Forest
+```{r}
+mean(predict(forest$best.model, train_cv) != train_cv$classe)
+```
+
+Thus, the lowest out of sample error is random forest. We choose random forest as the best method to do the predictions of testing data.
+
+## Prediction
+
+```{r}
+predict(forest$best.model, test) 
+```
+
+## Conclusion
+After trying some machine learning algorithms, we choose random forest to do the predicitons which provides lowest error. We split data into training, validation and testing set. Firstly, we do the preparation of raw data. Secondly, we try different models by using training set. Thirdly, we use validation set to test out of sample error. Finally, after comparing we choose random forest as our method to do the prediciton. The result of prediction using random forest is B  A  B  A  A  E  D  B  A  A  B  C  B  A  E  E  A  B  B  B for each individual. 
